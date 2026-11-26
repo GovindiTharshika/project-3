@@ -1,0 +1,106 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  ANALYST
+  VIEWER
+}
+
+enum CustomerStatus {
+  ACTIVE
+  TRIAL
+  CANCELED
+}
+
+enum BillingStatus {
+  SUCCEEDED
+  FAILED
+  PENDING
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  name         String
+  role         Role       @default(VIEWER)
+  passwordHash String
+  createdAt    DateTime   @default(now())
+  auditLogs    AuditLog[]
+  usageRecords UsageRecord[]
+}
+
+model Plan {
+  id             String     @id @default(cuid())
+  name           String     @unique
+  description    String
+  priceCents     Int
+  interval       String     @default("month")
+  usageAllowance Int
+  active         Boolean    @default(true)
+  createdAt      DateTime   @default(now())
+  customers      Customer[]
+}
+
+model Customer {
+  id             String         @id @default(cuid())
+  name           String
+  email          String         @unique
+  company        String
+  status         CustomerStatus @default(ACTIVE)
+  planId         String
+  plan           Plan           @relation(fields: [planId], references: [id], onDelete: Restrict)
+  createdAt      DateTime       @default(now())
+  usageRecords   UsageRecord[]
+  billingEvents  BillingEvent[]
+
+  @@index([status, createdAt])
+}
+
+model UsageRecord {
+  id          String   @id @default(cuid())
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  units       Int
+  metric      String
+  recordedAt  DateTime @default(now())
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([customerId, recordedAt])
+  @@index([createdById])
+}
+
+model BillingEvent {
+  id             String        @id @default(cuid())
+  customerId     String
+  customer       Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  amountCents    Int
+  currency       String        @default("USD")
+  status         BillingStatus @default(PENDING)
+  description    String
+  idempotencyKey String        @unique
+  createdAt      DateTime      @default(now())
+
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  actor      User     @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  action     String
+  entityType String
+  entityId   String
+  details    Json
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
+}
